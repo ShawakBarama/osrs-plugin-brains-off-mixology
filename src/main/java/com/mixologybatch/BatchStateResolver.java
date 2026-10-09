@@ -270,6 +270,40 @@ final class BatchStateResolver
 		return true;
 	}
 
+	static boolean hasUnfinishedPotion(List<InventorySlot> inventory)
+	{
+		for (InventorySlot slot : inventory)
+		{
+			if (slot.isPotion() && !slot.isFinished())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a refill started from this inventory would have at least one potion
+	 * to mix: there is a free planned slot and the configured totals are not met.
+	 */
+	static boolean canRefill(BatchPlan plan, List<InventorySlot> inventory)
+	{
+		if (!plan.isValid() || plan.size() == 0)
+		{
+			return false;
+		}
+		CyclePlan candidate = CyclePlan.create(plan, inventory);
+		if (!candidate.isValid())
+		{
+			return false;
+		}
+		candidate.observeInventory(inventory);
+		int nextSlot = candidate.firstEmptySlot(inventory);
+		return countPotions(inventory) < candidate.getPotionCapacity()
+			&& nextSlot >= 0
+			&& nextNeededPotion(plan, candidate, inventory, nextSlot) != null;
+	}
+
 	static boolean hasMixerContents(int[] mixerSlots)
 	{
 		for (int slot : mixerSlots)

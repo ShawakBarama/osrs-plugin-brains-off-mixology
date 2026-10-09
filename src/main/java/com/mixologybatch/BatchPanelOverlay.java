@@ -55,14 +55,37 @@ final class BatchPanelOverlay extends OverlayPanel
 				renderProcessing(guidance);
 				break;
 			case COMPLETE:
-				addLine("Complete", "Deposit / reset", COMPLETE);
-				addLine("Potions", plugin.getPlan().size() + "/" + plugin.getPlan().size(), COMPLETE);
+				renderComplete();
 				break;
 			default:
 		}
 		renderOrders();
 		renderBatchInventory();
 		return super.render(graphics);
+	}
+
+	private void renderComplete()
+	{
+		DeliveryDecision decision = plugin.getDeliveryDecision();
+		switch (decision.getKind())
+		{
+			case DELIVER:
+				addLine("Deliver", decision.getFillable() + " order" + (decision.getFillable() == 1 ? "" : "s") + " ready", COMPLETE);
+				break;
+			case REFILL:
+				addLine("Refill", decision.getFillable() + "/" + decision.getRequired() + " orders ready", EXTRA);
+				break;
+			case WASTE:
+				addLine("No order ready", "Deposit wastes", ERROR);
+				addLine(
+					"Slot " + (decision.getWastedSlot() + 1),
+					decision.getWastedPotion().name(),
+					ERROR);
+				break;
+			default:
+				addLine("Complete", "Deposit / reset", COMPLETE);
+				addLine("Potions", plugin.getPlan().size() + "/" + plugin.getPlan().size(), COMPLETE);
+		}
 	}
 
 	private void renderOrders()
@@ -74,6 +97,14 @@ final class BatchPanelOverlay extends OverlayPanel
 		}
 
 		panelComponent.getChildren().add(TitleComponent.builder().text("Orders").build());
+		DeliveryDecision decision = plugin.getDeliveryDecision();
+		if (decision.getKind() != DeliveryDecision.Kind.UNKNOWN)
+		{
+			addLine(
+				"Ready",
+				decision.getFillable() + " (need " + decision.getRequired() + ")",
+				decision.getKind() == DeliveryDecision.Kind.DELIVER ? COMPLETE : EXTRA);
+		}
 		for (int index = 0; index < match.getOrders().size(); index++)
 		{
 			PotionOrder order = match.getOrders().get(index);
@@ -82,10 +113,12 @@ final class BatchPanelOverlay extends OverlayPanel
 				addLine("?", "Unknown", EMPTY);
 				continue;
 			}
+			boolean fillable = match.isFillable(index);
 			addLine(
 				order.getPotion().name() + "  " + order.getStation().getObjectName(),
-				match.isFillable(index) ? "Ready" : "Missing",
-				match.isFillable(index) ? COMPLETE : EMPTY);
+				fillable ? "Ready"
+					: config.skipOrderPotions().contains(order.getPotion()) ? "Skipped" : "Missing",
+				fillable ? COMPLETE : EMPTY);
 		}
 	}
 

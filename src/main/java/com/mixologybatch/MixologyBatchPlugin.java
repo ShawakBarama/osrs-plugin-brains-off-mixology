@@ -18,9 +18,11 @@ import net.runelite.api.MenuEntry;
 import net.runelite.api.Player;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.GraphicsObjectCreated;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.PostMenuSort;
+import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
@@ -86,6 +88,8 @@ public class MixologyBatchPlugin extends Plugin
 	private final ProcessedStationTracker processedStations = new ProcessedStationTracker();
 	private List<PotionOrder> currentOrders = Collections.emptyList();
 	private OrderMatch orderMatch = OrderMatch.none();
+	private DeliveryDecision deliveryDecision = DeliveryDecision.unknown();
+	private final QuickActionTracker quickActions = new QuickActionTracker();
 
 	@Override
 	protected void startUp()
@@ -114,6 +118,32 @@ public class MixologyBatchPlugin extends Plugin
 		gameTickCounter++;
 		readOrders();
 		updateState();
+		updateQuickActions();
+	}
+
+	@Subscribe
+	public void onGraphicsObjectCreated(GraphicsObjectCreated event)
+	{
+		QuickAction action = QuickAction.fromSpotanim(event.getGraphicsObject().getId());
+		if (!inLab || action == null || !config.highlightQuickAction())
+		{
+			return;
+		}
+		quickActions.open(
+			action,
+			client.getVarbitValue(action.getStation().getPotionVarbit()) != 0,
+			client.getVarbitValue(action.getProgressVarbit()),
+			client.getVarbitValue(action.getSkillshotVarbit()));
+	}
+
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged event)
+	{
+		// Close a window as soon as it ends rather than on the next tick.
+		if (quickActions.hasOpenWindow())
+		{
+			updateQuickActions();
+		}
 	}
 
 	@Subscribe
@@ -335,6 +365,18 @@ public class MixologyBatchPlugin extends Plugin
 			cyclePlan.observeInventory(planningInventory);
 		}
 
+		orderMatch = config.useCurrentOrders()
+			? OrderMatch.match(currentOrders, inventory, processedStations(inventory))
+			: OrderMatch.none();
+		deliveryDecision = config.useCurrentOrders()
+			? DeliveryDecision.decide(
+				orderMatch,
+				config.skipOrderPotions(),
+				config.deliverThreshold(),
+				BatchStateResolver.canRefill(plan, planningInventory),
+				planningInventory)
+			: DeliveryDecision.unknown();
+
 		if (batchMode.isRefilling()
 			&& cyclePlan != null
 			&& cyclePlan.isValid()
@@ -344,10 +386,9 @@ public class MixologyBatchPlugin extends Plugin
 		{
 			batchMode = BatchMode.PROCESSING;
 		}
-		else if (batchMode.allowsRollingRefill()
-			&& activeStations.isEmpty()
+		else if (activeStations.isEmpty()
 			&& !mixingActivity
-			&& BatchStateResolver.shouldStartRollingRefill(planningInventory))
+			&& rollingRefillDue(planningInventory))
 		{
 			cyclePlan = CyclePlan.create(plan, planningInventory);
 			batchMode = BatchMode.REFILLING;
@@ -376,9 +417,6 @@ public class MixologyBatchPlugin extends Plugin
 			currentPotionCounts.merge(activePotion, 1, Integer::sum);
 		}
 		plannedPotionQueue = buildPlannedPotionQueue(planningInventory, 4);
-		orderMatch = config.useCurrentOrders()
-			? OrderMatch.match(currentOrders, inventory, processedStations(inventory))
-			: OrderMatch.none();
 
 		guidance = resolver.resolve(
 			plan,
@@ -581,6 +619,40 @@ public class MixologyBatchPlugin extends Plugin
 	}
 
 	/**
+	 * With known orders, a finished inventory refills exactly when too few orders
+	 * can be delivered. Otherwise the original rule applies: refill once only
+	 * Mixalots and at most two other finished potions remain.
+	 */
+	private boolean rollingRefillDue(List<InventorySlot> inventory)
+	{
+		if (deliveryDecision.getKind() == DeliveryDecision.Kind.UNKNOWN)
+		{
+			return batchMode.allowsRollingRefill()
+				&& BatchStateResolver.shouldStartRollingRefill(inventory);
+		}
+		return !batchMode.isRefilling()
+			&& deliveryDecision.getKind() == DeliveryDecision.Kind.REFILL
+			&& !BatchStateResolver.hasUnfinishedPotion(inventory);
+	}
+
+	private void updateQuickActions()
+	{
+		if (!inLab || !config.highlightQuickAction())
+		{
+			quickActions.reset();
+			return;
+		}
+		for (QuickAction action : QuickAction.values())
+		{
+			quickActions.update(
+				action,
+				client.getVarbitValue(action.getStation().getPotionVarbit()) != 0,
+				client.getVarbitValue(action.getProgressVarbit()),
+				client.getVarbitValue(action.getSkillshotVarbit()));
+		}
+	}
+
+	/**
 	 * Orders are read only on game ticks: the game zeroes every order varbit
 	 * mid-delivery before writing the new orders.
 	 */
@@ -684,6 +756,8 @@ public class MixologyBatchPlugin extends Plugin
 		processedStations.reset();
 		currentOrders = Collections.emptyList();
 		orderMatch = OrderMatch.none();
+		deliveryDecision = DeliveryDecision.unknown();
+		quickActions.reset();
 	}
 
 	boolean isInLab()
@@ -704,6 +778,16 @@ public class MixologyBatchPlugin extends Plugin
 	OrderMatch getOrderMatch()
 	{
 		return orderMatch;
+	}
+
+	DeliveryDecision getDeliveryDecision()
+	{
+		return deliveryDecision;
+	}
+
+	boolean isQuickActionOpen(Station station)
+	{
+		return quickActions.isOpen(station);
 	}
 
 	BatchEntry getCycleEntry(int inventorySlot, Potion potion)

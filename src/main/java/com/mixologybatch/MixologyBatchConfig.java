@@ -1,6 +1,8 @@
 package com.mixologybatch;
 
 import java.awt.Color;
+import java.util.EnumSet;
+import java.util.Set;
 import net.runelite.client.config.Alpha;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
@@ -188,13 +190,38 @@ public interface MixologyBatchConfig extends Config
 		return new Color(255, 0, 255, 255);
 	}
 
+	@ConfigItem(
+		section = DISPLAY,
+		keyName = "highlightQuickAction",
+		name = "Highlight quick action",
+		description = "Outline the Agitator or Alembic while its quick-action click window is open",
+		position = 6
+	)
+	default boolean highlightQuickAction()
+	{
+		return true;
+	}
+
+	@Alpha
+	@ConfigItem(
+		section = DISPLAY,
+		keyName = "quickActionColor",
+		name = "Quick action color",
+		description = "Colour used for the quick-action station outline",
+		position = 7
+	)
+	default Color quickActionColor()
+	{
+		return Color.GREEN;
+	}
+
 	@Range(min = 1, max = 8)
 	@ConfigItem(
 		section = DISPLAY,
 		keyName = "outlineWidth",
 		name = "Outline width",
 		description = "Width of scene-object outlines",
-		position = 6
+		position = 8
 	)
 	default int outlineWidth()
 	{
@@ -207,7 +234,7 @@ public interface MixologyBatchConfig extends Config
 		keyName = "outlineFeather",
 		name = "Outline feather",
 		description = "Softness of scene-object outlines",
-		position = 7
+		position = 9
 	)
 	default int outlineFeather()
 	{
@@ -224,5 +251,30 @@ public interface MixologyBatchConfig extends Config
 	default boolean useCurrentOrders()
 	{
 		return true;
+	}
+
+	@Range(min = 1, max = 3)
+	@ConfigItem(
+		section = ORDERS,
+		keyName = "deliverThreshold",
+		name = "Deliver threshold",
+		description = "Orders that must be fillable before delivering; otherwise refill first. Orders for skipped potions that you can't fill don't count, so the target drops when only fewer orders are possible",
+		position = 1
+	)
+	default int deliverThreshold()
+	{
+		return 1;
+	}
+
+	@ConfigItem(
+		section = ORDERS,
+		keyName = "skipOrderPotions",
+		name = "Skip order potions",
+		description = "Potions never brewed for orders. Their orders are left to be refreshed by a normal deposit",
+		position = 2
+	)
+	default Set<Potion> skipOrderPotions()
+	{
+		return EnumSet.of(Potion.MMM, Potion.AAA);
 	}
 }

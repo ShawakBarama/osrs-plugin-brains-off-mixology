@@ -18,6 +18,7 @@ final class BatchSceneOverlay extends Overlay
 {
 	private static final Color VESSEL_COLOR = Color.WHITE;
 	private static final Color COMPLETE_COLOR = new Color(0, 255, 90);
+	private static final Color WASTE_COLOR = new Color(255, 140, 0);
 	private static final Color NEXT_RECIPE_COLOR = new Color(150, 150, 150);
 	private static final int MARKER_OFFSET = -22;
 	private static final int CURRENT_RECIPE_OFFSET = 0;
@@ -55,6 +56,7 @@ final class BatchSceneOverlay extends Overlay
 		}
 
 		Guidance guidance = plugin.getGuidance();
+		renderQuickActions(guidance);
 		if (guidance.getPhase() == Guidance.Phase.MIXING)
 		{
 			renderMixingRecipe(
@@ -72,18 +74,34 @@ final class BatchSceneOverlay extends Overlay
 		{
 			case USE_STATION:
 				target = guidance.getEntry().getStation().getLabObject();
-				color = config.stationColor();
+				color = stationColor(guidance.getEntry().getStation());
 				label = stationLabel(guidance.getEntry(), false);
 				break;
 			case WAIT_STATION:
 				target = guidance.getEntry().getStation().getLabObject();
-				color = config.stationColor();
+				color = stationColor(guidance.getEntry().getStation());
 				label = stationLabel(guidance.getEntry(), true);
 				break;
 			case DEPOSIT:
+				DeliveryDecision decision = plugin.getDeliveryDecision();
 				target = LabObject.CONVEYOR;
-				color = COMPLETE_COLOR;
-				label = "BATCH READY";
+				switch (decision.getKind())
+				{
+					case REFILL:
+						// Too few orders are fillable: the conveyor is deliberately not highlighted.
+						return null;
+					case WASTE:
+						color = WASTE_COLOR;
+						label = "WASTES " + decision.getWastedPotion().name();
+						break;
+					case DELIVER:
+						color = COMPLETE_COLOR;
+						label = "DELIVER " + decision.getFillable();
+						break;
+					default:
+						color = COMPLETE_COLOR;
+						label = "BATCH READY";
+				}
 				break;
 			default:
 				return null;
@@ -91,6 +109,43 @@ final class BatchSceneOverlay extends Overlay
 
 		drawTarget(graphics, target, label, color);
 		return null;
+	}
+
+	/**
+	 * Outlines stations with an open quick-action window that are not already the
+	 * guided target; the guided target switches its own outline colour instead.
+	 */
+	private void renderQuickActions(Guidance guidance)
+	{
+		for (Station station : Station.values())
+		{
+			if (!plugin.isQuickActionOpen(station) || isGuidedStation(guidance, station))
+			{
+				continue;
+			}
+			TileObject object = objects.find(station.getLabObject());
+			if (object != null)
+			{
+				outliner.drawOutline(
+					object,
+					config.outlineWidth(),
+					config.quickActionColor(),
+					config.outlineFeather());
+			}
+		}
+	}
+
+	private static boolean isGuidedStation(Guidance guidance, Station station)
+	{
+		return (guidance.getAction() == Guidance.Action.USE_STATION
+				|| guidance.getAction() == Guidance.Action.WAIT_STATION)
+			&& guidance.getEntry() != null
+			&& guidance.getEntry().getStation() == station;
+	}
+
+	private Color stationColor(Station station)
+	{
+		return plugin.isQuickActionOpen(station) ? config.quickActionColor() : config.stationColor();
 	}
 
 	private void renderPermanentLeverMarkers(Graphics2D graphics)

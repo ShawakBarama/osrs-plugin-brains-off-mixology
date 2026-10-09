@@ -27,7 +27,7 @@ Toolchain is pinned to Java 11 in `build.gradle` to match CI (`ubuntu-latest`, T
 
 ## Architecture
 
-Single package `com.mixologybatch`. Types are package-private and `final` by default; only `MixologyBatchPlugin`, `MixologyBatchConfig`, and `StationOrder` are public (RuneLite needs those).
+Single package `com.mixologybatch`. Types are package-private and `final` by default; only `MixologyBatchPlugin`, `MixologyBatchConfig`, `StationOrder`, and `Potion` are public (RuneLite needs those; `Potion` because the `Set<Potion>` skip-list config renders as a multi-select).
 
 ### Two-layer planning
 
