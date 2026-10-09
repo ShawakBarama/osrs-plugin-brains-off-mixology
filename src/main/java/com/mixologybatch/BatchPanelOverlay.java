@@ -60,8 +60,33 @@ final class BatchPanelOverlay extends OverlayPanel
 				break;
 			default:
 		}
+		renderOrders();
 		renderBatchInventory();
 		return super.render(graphics);
+	}
+
+	private void renderOrders()
+	{
+		OrderMatch match = plugin.getOrderMatch();
+		if (!config.useCurrentOrders() || match.getOrders().isEmpty())
+		{
+			return;
+		}
+
+		panelComponent.getChildren().add(TitleComponent.builder().text("Orders").build());
+		for (int index = 0; index < match.getOrders().size(); index++)
+		{
+			PotionOrder order = match.getOrders().get(index);
+			if (order == null)
+			{
+				addLine("?", "Unknown", EMPTY);
+				continue;
+			}
+			addLine(
+				order.getPotion().name() + "  " + order.getStation().getObjectName(),
+				match.isFillable(index) ? "Ready" : "Missing",
+				match.isFillable(index) ? COMPLETE : EMPTY);
+		}
 	}
 
 	private void renderMixing(Guidance guidance)

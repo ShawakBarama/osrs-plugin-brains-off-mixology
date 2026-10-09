@@ -27,6 +27,13 @@ public interface MixologyBatchConfig extends Config
 	)
 	String DISPLAY = "display";
 
+	@ConfigSection(
+		name = "Orders",
+		description = "Awareness of the three current conveyor orders",
+		position = 30
+	)
+	String ORDERS = "orders";
+
 	@ConfigItem(
 		keyName = "stationOrder",
 		name = "Station order",
@@ -205,5 +212,17 @@ public interface MixologyBatchConfig extends Config
 	default int outlineFeather()
 	{
 		return 1;
+	}
+
+	@ConfigItem(
+		section = ORDERS,
+		keyName = "useCurrentOrders",
+		name = "Use current orders",
+		description = "Read the three conveyor orders and show which are ready to deliver. When off, the plugin ignores orders entirely",
+		position = 0
+	)
+	default boolean useCurrentOrders()
+	{
+		return true;
 	}
 }

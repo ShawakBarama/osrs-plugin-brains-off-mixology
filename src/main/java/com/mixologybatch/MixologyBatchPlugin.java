@@ -83,6 +83,9 @@ public class MixologyBatchPlugin extends Plugin
 	private int gameTickCounter;
 	private BatchMode batchMode = BatchMode.REFILLING;
 	private boolean inLab;
+	private final ProcessedStationTracker processedStations = new ProcessedStationTracker();
+	private List<PotionOrder> currentOrders = Collections.emptyList();
+	private OrderMatch orderMatch = OrderMatch.none();
 
 	@Override
 	protected void startUp()
@@ -109,6 +112,7 @@ public class MixologyBatchPlugin extends Plugin
 	public void onGameTick(GameTick event)
 	{
 		gameTickCounter++;
+		readOrders();
 		updateState();
 	}
 
@@ -280,6 +284,10 @@ public class MixologyBatchPlugin extends Plugin
 			}
 		}
 		reconcileMixPrediction(inventory);
+		if (config.useCurrentOrders())
+		{
+			processedStations.observe(inventory, activeStations, gameTickCounter);
+		}
 
 		List<InventorySlot> planningInventory = inventory;
 		Potion planningVesselPotion = vesselPotion;
@@ -368,6 +376,9 @@ public class MixologyBatchPlugin extends Plugin
 			currentPotionCounts.merge(activePotion, 1, Integer::sum);
 		}
 		plannedPotionQueue = buildPlannedPotionQueue(planningInventory, 4);
+		orderMatch = config.useCurrentOrders()
+			? OrderMatch.match(currentOrders, inventory, processedStations(inventory))
+			: OrderMatch.none();
 
 		guidance = resolver.resolve(
 			plan,
@@ -569,6 +580,55 @@ public class MixologyBatchPlugin extends Plugin
 			guidance, station, stationContainsPotion, partialProcessingStation);
 	}
 
+	/**
+	 * Orders are read only on game ticks: the game zeroes every order varbit
+	 * mid-delivery before writing the new orders.
+	 */
+	private void readOrders()
+	{
+		if (!inLab || !config.useCurrentOrders())
+		{
+			currentOrders = Collections.emptyList();
+			return;
+		}
+
+		List<PotionOrder> orders = new ArrayList<>(3);
+		orders.add(PotionOrder.fromVarbits(
+			client.getVarbitValue(VarbitID.MM_LAB_ORDER_1_TYPE),
+			client.getVarbitValue(VarbitID.MM_LAB_ORDER_1_MODIFIER)));
+		orders.add(PotionOrder.fromVarbits(
+			client.getVarbitValue(VarbitID.MM_LAB_ORDER_2_TYPE),
+			client.getVarbitValue(VarbitID.MM_LAB_ORDER_2_MODIFIER)));
+		orders.add(PotionOrder.fromVarbits(
+			client.getVarbitValue(VarbitID.MM_LAB_ORDER_3_TYPE),
+			client.getVarbitValue(VarbitID.MM_LAB_ORDER_3_MODIFIER)));
+		currentOrders = Collections.unmodifiableList(orders);
+	}
+
+	/**
+	 * Observed processing stations, falling back to the station the cycle plan
+	 * assigned to a slot when the processing was not observed.
+	 */
+	private Station[] processedStations(List<InventorySlot> inventory)
+	{
+		Station[] stations = new Station[inventory.size()];
+		for (int slot = 0; slot < inventory.size(); slot++)
+		{
+			InventorySlot actual = inventory.get(slot);
+			if (!actual.isFinished())
+			{
+				continue;
+			}
+			stations[slot] = processedStations.stationFor(slot);
+			if (stations[slot] == null)
+			{
+				BatchEntry planned = getCycleEntry(slot, actual.getPotion());
+				stations[slot] = planned == null ? null : planned.getStation();
+			}
+		}
+		return stations;
+	}
+
 	private static int countInventoryPotions(List<InventorySlot> inventory)
 	{
 		int count = 0;
@@ -621,6 +681,9 @@ public class MixologyBatchPlugin extends Plugin
 		resetActionQueue();
 		batchMode = BatchMode.REFILLING;
 		guidance = Guidance.outside();
+		processedStations.reset();
+		currentOrders = Collections.emptyList();
+		orderMatch = OrderMatch.none();
 	}
 
 	boolean isInLab()
@@ -636,6 +699,11 @@ public class MixologyBatchPlugin extends Plugin
 	BatchPlan getPlan()
 	{
 		return plan;
+	}
+
+	OrderMatch getOrderMatch()
+	{
+		return orderMatch;
 	}
 
 	BatchEntry getCycleEntry(int inventorySlot, Potion potion)
