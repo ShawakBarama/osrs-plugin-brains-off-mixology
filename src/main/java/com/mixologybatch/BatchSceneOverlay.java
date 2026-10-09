@@ -23,6 +23,8 @@ final class BatchSceneOverlay extends Overlay
 	private static final int MARKER_OFFSET = -22;
 	private static final int CURRENT_RECIPE_OFFSET = 0;
 	private static final int NEXT_RECIPE_OFFSET = 20;
+	// Lifts station labels clear of the game's progress bar above the machine.
+	private static final int STATION_LABEL_OFFSET = -20;
 
 	private final Client client;
 	private final MixologyBatchPlugin plugin;
@@ -76,6 +78,11 @@ final class BatchSceneOverlay extends Overlay
 				target = guidance.getEntry().getStation().getLabObject();
 				color = stationColor(guidance.getEntry().getStation());
 				label = stationLabel(guidance.getEntry(), false);
+				break;
+			case USE_ITEM_ON_STATION:
+				target = guidance.getEntry().getStation().getLabObject();
+				color = stationColor(guidance.getEntry().getStation());
+				label = "USE SLOT " + (guidance.getEntry().getInventorySlot() + 1);
 				break;
 			case WAIT_STATION:
 				target = guidance.getEntry().getStation().getLabObject();
@@ -137,8 +144,7 @@ final class BatchSceneOverlay extends Overlay
 
 	private static boolean isGuidedStation(Guidance guidance, Station station)
 	{
-		return (guidance.getAction() == Guidance.Action.USE_STATION
-				|| guidance.getAction() == Guidance.Action.WAIT_STATION)
+		return guidance.targetsStation()
 			&& guidance.getEntry() != null
 			&& guidance.getEntry().getStation() == station;
 	}
@@ -238,7 +244,19 @@ final class BatchSceneOverlay extends Overlay
 			return;
 		}
 		outliner.drawOutline(object, config.outlineWidth(), color, config.outlineFeather());
-		drawLabel(graphics, object, label, color, 0);
+		drawLabel(graphics, object, label, color, isStation(target) ? STATION_LABEL_OFFSET : 0);
+	}
+
+	private static boolean isStation(LabObject object)
+	{
+		for (Station station : Station.values())
+		{
+			if (station.getLabObject() == object)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static String stationLabel(BatchEntry entry, boolean active)

@@ -277,4 +277,16 @@ public interface MixologyBatchConfig extends Config
 	{
 		return EnumSet.of(Potion.MMM, Potion.AAA);
 	}
+
+	@ConfigItem(
+		section = ORDERS,
+		keyName = "brewCurrentOrders",
+		name = "Brew current orders",
+		description = "When a refill starts, mix potions for current orders the stock can't cover. They go after the stock and are used on their station at the end of its batch",
+		position = 3
+	)
+	default boolean brewCurrentOrders()
+	{
+		return true;
+	}
 }

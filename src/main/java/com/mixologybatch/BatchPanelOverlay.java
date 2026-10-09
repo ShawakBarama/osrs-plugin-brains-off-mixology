@@ -105,6 +105,11 @@ final class BatchPanelOverlay extends OverlayPanel
 				decision.getFillable() + " (need " + decision.getRequired() + ")",
 				decision.getKind() == DeliveryDecision.Kind.DELIVER ? COMPLETE : EXTRA);
 		}
+		int unbrewable = plugin.getUnbrewableOrderCount();
+		if (unbrewable > 0)
+		{
+			addLine("No room", unbrewable + " order potion" + (unbrewable == 1 ? "" : "s") + " not brewed", ERROR);
+		}
 		for (int index = 0; index < match.getOrders().size(); index++)
 		{
 			PotionOrder order = match.getOrders().get(index);
@@ -129,6 +134,10 @@ final class BatchPanelOverlay extends OverlayPanel
 		addLine(entry.getPotion().name(), entry.getPotion().getDisplayName(), Color.WHITE);
 		addLine("Recipe", entry.getPotion().getRecipeSequence(), Color.WHITE);
 		addLine("Later", "#" + (entry.getStationOrdinal() + 1) + " " + entry.getStation().getObjectName(), config.stationColor());
+		if (entry.isOrderPotion())
+		{
+			addLine("For order", entry.getPotion().name() + "  " + entry.getStation().getObjectName(), COMPLETE);
+		}
 	}
 
 	private void renderProcessing(Guidance guidance)
@@ -137,7 +146,17 @@ final class BatchPanelOverlay extends OverlayPanel
 		addLine("Station batch", (entry.getStationOrdinal() + 1) + "/3", config.stationColor());
 		addLine(entry.getStation().getObjectName(), entry.getStation().getActionName(), config.stationColor());
 		addLine("Potion", (entry.getStationPosition() + 1) + "/" + entry.getStationTotal() + "  " + entry.getPotion().name(), Color.WHITE);
-		addLine("NEXT", guidance.getAction() == Guidance.Action.WAIT_STATION ? "Processing" : "Use station", config.stationColor());
+		switch (guidance.getAction())
+		{
+			case WAIT_STATION:
+				addLine("NEXT", "Processing", config.stationColor());
+				break;
+			case USE_ITEM_ON_STATION:
+				addLine("NEXT", "Use slot " + (entry.getInventorySlot() + 1) + " on " + entry.getStation().getObjectName(), config.stationColor());
+				break;
+			default:
+				addLine("NEXT", "Use station", config.stationColor());
+		}
 	}
 
 	private void renderBatchInventory()

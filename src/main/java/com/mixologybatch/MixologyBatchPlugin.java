@@ -338,7 +338,7 @@ public class MixologyBatchPlugin extends Plugin
 		boolean mixingActivity = vesselPotion != null || BatchStateResolver.hasMixerContents(mixerSlots);
 		if (!wasInLab || cyclePlan == null || !cyclePlan.belongsTo(plan))
 		{
-			cyclePlan = CyclePlan.create(plan, planningInventory);
+			cyclePlan = CyclePlan.create(refillPlan(), planningInventory);
 			batchMode = cyclePlan.isValid()
 				? BatchMode.initialize(
 					inventoryPotionCount,
@@ -351,14 +351,14 @@ public class MixologyBatchPlugin extends Plugin
 
 		if (batchMode == BatchMode.PROCESSING && mixingActivity && activeStations.isEmpty())
 		{
-			cyclePlan = CyclePlan.create(plan, planningInventory);
+			cyclePlan = CyclePlan.create(refillPlan(), planningInventory);
 			batchMode = BatchMode.REFILLING;
 		}
 		else if (batchMode.isRefilling()
 			&& cyclePlan != null
 			&& !cyclePlan.containsPotionSlots(planningInventory))
 		{
-			cyclePlan = CyclePlan.create(plan, planningInventory);
+			cyclePlan = CyclePlan.create(refillPlan(), planningInventory);
 		}
 		if (cyclePlan != null && cyclePlan.isValid())
 		{
@@ -373,7 +373,7 @@ public class MixologyBatchPlugin extends Plugin
 				orderMatch,
 				config.skipOrderPotions(),
 				config.deliverThreshold(),
-				BatchStateResolver.canRefill(plan, planningInventory),
+				BatchStateResolver.canRefill(refillPlan(), planningInventory),
 				planningInventory)
 			: DeliveryDecision.unknown();
 
@@ -390,7 +390,7 @@ public class MixologyBatchPlugin extends Plugin
 			&& !mixingActivity
 			&& rollingRefillDue(planningInventory))
 		{
-			cyclePlan = CyclePlan.create(plan, planningInventory);
+			cyclePlan = CyclePlan.create(refillPlan(), planningInventory);
 			batchMode = BatchMode.REFILLING;
 			resetActionQueue();
 		}
@@ -398,7 +398,7 @@ public class MixologyBatchPlugin extends Plugin
 			&& inventoryPotionCount == 0
 			&& activeStations.isEmpty())
 		{
-			cyclePlan = CyclePlan.create(plan, planningInventory);
+			cyclePlan = CyclePlan.create(refillPlan(), planningInventory);
 			batchMode = BatchMode.REFILLING;
 		}
 
@@ -419,7 +419,7 @@ public class MixologyBatchPlugin extends Plugin
 		plannedPotionQueue = buildPlannedPotionQueue(planningInventory, 4);
 
 		guidance = resolver.resolve(
-			plan,
+			activePlan(),
 			cyclePlan,
 			batchMode.isRefilling(),
 			planningInventory,
@@ -435,7 +435,7 @@ public class MixologyBatchPlugin extends Plugin
 		if (!batchMode.isRefilling())
 		{
 			mixPrediction = null;
-			cyclePlan = CyclePlan.create(plan, readInventory());
+			cyclePlan = CyclePlan.create(refillPlan(), readInventory());
 			batchMode = BatchMode.REFILLING;
 			trackedPotion = null;
 			trackedStep = 1;
@@ -568,7 +568,7 @@ public class MixologyBatchPlugin extends Plugin
 				break;
 			}
 			Potion potion = BatchStateResolver.nextNeededPotion(
-				plan, cyclePlan, projectedInventory, nextSlot);
+				activePlan(), cyclePlan, projectedInventory, nextSlot);
 			if (potion == null)
 			{
 				break;
@@ -616,6 +616,29 @@ public class MixologyBatchPlugin extends Plugin
 			client.getVarbitValue(station.getPotionVarbit())) != null;
 		return StationMenuGuard.canUseStation(
 			guidance, station, stationContainsPotion, partialProcessingStation);
+	}
+
+	/**
+	 * The plan a new cycle starts from: the configured stock plus, when enabled,
+	 * potions for current orders that the stock cannot cover. Orders only change
+	 * on deposit, so this is stable for the whole refill it starts.
+	 */
+	private BatchPlan refillPlan()
+	{
+		if (!config.useCurrentOrders() || !config.brewCurrentOrders())
+		{
+			return plan;
+		}
+		return plan.withOrderPotions(plan.ordersToBrew(currentOrders, config.skipOrderPotions()));
+	}
+
+	/**
+	 * The plan the current cycle follows, including any order potions it was
+	 * created with.
+	 */
+	private BatchPlan activePlan()
+	{
+		return cyclePlan == null ? plan : cyclePlan.getTarget();
 	}
 
 	/**
@@ -772,7 +795,15 @@ public class MixologyBatchPlugin extends Plugin
 
 	BatchPlan getPlan()
 	{
-		return plan;
+		return activePlan();
+	}
+
+	/**
+	 * Current orders that need brewing but don't fit after the configured stock.
+	 */
+	int getUnbrewableOrderCount()
+	{
+		return batchMode.isRefilling() ? activePlan().getDroppedOrderCount() : refillPlan().getDroppedOrderCount();
 	}
 
 	OrderMatch getOrderMatch()

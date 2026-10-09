@@ -107,9 +107,7 @@ final class BatchStateResolver
 		{
 			Map.Entry<Station, Potion> active = activeStations.entrySet().iterator().next();
 			BatchEntry previousEntry = previousGuidance == null ? null : previousGuidance.getEntry();
-			if (previousEntry != null
-				&& (previousGuidance.getAction() == Guidance.Action.USE_STATION
-					|| previousGuidance.getAction() == Guidance.Action.WAIT_STATION))
+			if (previousEntry != null && previousGuidance.targetsStation())
 			{
 				if (previousEntry.getStation() != active.getKey()
 					|| previousEntry.getPotion() != active.getValue())
@@ -128,9 +126,26 @@ final class BatchStateResolver
 		BatchEntry unfinished = firstUnfinishedEntry(cycle, inventory);
 		if (unfinished != null)
 		{
-			return Guidance.processing(unfinished, false);
+			// A station takes the first unfinished potion in the inventory, so an
+			// order potion behind other unfinished potions must be used on it directly.
+			return unfinished.isOrderPotion() && hasUnfinishedBefore(inventory, unfinished.getInventorySlot())
+				? Guidance.useItemOnStation(unfinished)
+				: Guidance.processing(unfinished, false);
 		}
 		return Guidance.complete();
+	}
+
+	private static boolean hasUnfinishedBefore(List<InventorySlot> inventory, int slot)
+	{
+		for (int index = 0; index < slot; index++)
+		{
+			InventorySlot actual = inventory.get(index);
+			if (actual.isPotion() && !actual.isFinished())
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	static BatchEntry firstUnfinishedEntry(CyclePlan cycle, List<InventorySlot> inventory)
@@ -139,7 +154,7 @@ final class BatchStateResolver
 		{
 			return null;
 		}
-		for (int rank = 0; rank < cycle.size(); rank++)
+		for (int rank : cycle.processingRanks())
 		{
 			int slot = cycle.slotAtRank(rank);
 			InventorySlot actual = inventory.get(slot);
