@@ -8,6 +8,7 @@ import java.util.Deque;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.Item;
@@ -29,6 +30,7 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -57,6 +59,9 @@ public class MixologyBatchPlugin extends Plugin
 
 	@Inject
 	private OverlayManager overlayManager;
+
+	@Inject
+	private Notifier notifier;
 
 	@Inject
 	private BatchPanelOverlay panelOverlay;
@@ -90,6 +95,7 @@ public class MixologyBatchPlugin extends Plugin
 	private OrderMatch orderMatch = OrderMatch.none();
 	private DeliveryDecision deliveryDecision = DeliveryDecision.unknown();
 	private final QuickActionTracker quickActions = new QuickActionTracker();
+	private final DigweedTracker digweed = new DigweedTracker();
 
 	@Override
 	protected void startUp()
@@ -119,6 +125,7 @@ public class MixologyBatchPlugin extends Plugin
 		readOrders();
 		updateState();
 		updateQuickActions();
+		updateDigweed();
 	}
 
 	@Subscribe
@@ -144,6 +151,14 @@ public class MixologyBatchPlugin extends Plugin
 		{
 			updateQuickActions();
 		}
+		for (DigweedSpot spot : DigweedSpot.values())
+		{
+			if (event.getVarbitId() == spot.getReadyVarbit())
+			{
+				updateDigweed();
+				break;
+			}
+		}
 	}
 
 	@Subscribe
@@ -158,7 +173,10 @@ public class MixologyBatchPlugin extends Plugin
 	@Subscribe
 	public void onPostMenuSort(PostMenuSort event)
 	{
-		if (!inLab || !config.guardWrongStations() || client.isMenuOpen())
+		boolean guardStations = config.guardWrongStations();
+		boolean guardConveyor = config.guardConveyor()
+			&& deliveryDecision.getKind() == DeliveryDecision.Kind.REFILL;
+		if (!inLab || (!guardStations && !guardConveyor) || client.isMenuOpen())
 		{
 			return;
 		}
@@ -166,6 +184,7 @@ public class MixologyBatchPlugin extends Plugin
 		Menu menu = client.getMenu();
 		MenuEntry[] entries = menu.getMenuEntries();
 		StationMenuGuard.MenuScan scan = new StationMenuGuard.MenuScan();
+		ConveyorMenuGuard.MenuScan conveyorScan = new ConveyorMenuGuard.MenuScan();
 
 		for (int i = 0; i < entries.length; i++)
 		{
@@ -177,18 +196,39 @@ public class MixologyBatchPlugin extends Plugin
 				entry.getParam1(),
 				entry.getType(),
 				entry.getOption());
+			conveyorScan.accept(
+				i,
+				entry.getIdentifier(),
+				entry.getParam0(),
+				entry.getParam1(),
+				entry.getType(),
+				entry.getOption());
 		}
 
-		StationMenuGuard.MenuSwap swap = scan.select();
-		if (swap == null || canUseStation(swap.getStation()))
+		boolean changed = false;
+		StationMenuGuard.MenuSwap swap = guardStations ? scan.select() : null;
+		if (swap != null && !canUseStation(swap.getStation()))
 		{
-			return;
+			swapEntries(entries, swap.getProcessingIndex(), swap.getCheckIndex());
+			changed = true;
 		}
+		int[] conveyorSwap = guardConveyor ? conveyorScan.select() : null;
+		if (conveyorSwap != null)
+		{
+			swapEntries(entries, conveyorSwap[0], conveyorSwap[1]);
+			changed = true;
+		}
+		if (changed)
+		{
+			menu.setMenuEntries(entries);
+		}
+	}
 
-		MenuEntry processingEntry = entries[swap.getProcessingIndex()];
-		entries[swap.getProcessingIndex()] = entries[swap.getCheckIndex()];
-		entries[swap.getCheckIndex()] = processingEntry;
-		menu.setMenuEntries(entries);
+	private static void swapEntries(MenuEntry[] entries, int first, int second)
+	{
+		MenuEntry swapped = entries[first];
+		entries[first] = entries[second];
+		entries[second] = swapped;
 	}
 
 	@Subscribe
@@ -658,6 +698,24 @@ public class MixologyBatchPlugin extends Plugin
 			&& !BatchStateResolver.hasUnfinishedPotion(inventory);
 	}
 
+	private void updateDigweed()
+	{
+		if (!inLab)
+		{
+			digweed.reset();
+			return;
+		}
+		Map<DigweedSpot, Boolean> readiness = new EnumMap<>(DigweedSpot.class);
+		for (DigweedSpot spot : DigweedSpot.values())
+		{
+			readiness.put(spot, client.getVarbitValue(spot.getReadyVarbit()) == 1);
+		}
+		for (DigweedSpot spawned : digweed.observe(readiness))
+		{
+			notifier.notify(config.notifyDigweed(), "A Digweed has spawned in the " + spawned.getCornerName() + " corner.");
+		}
+	}
+
 	private void updateQuickActions()
 	{
 		if (!inLab || !config.highlightQuickAction())
@@ -781,6 +839,7 @@ public class MixologyBatchPlugin extends Plugin
 		orderMatch = OrderMatch.none();
 		deliveryDecision = DeliveryDecision.unknown();
 		quickActions.reset();
+		digweed.reset();
 	}
 
 	boolean isInLab()
@@ -814,6 +873,11 @@ public class MixologyBatchPlugin extends Plugin
 	DeliveryDecision getDeliveryDecision()
 	{
 		return deliveryDecision;
+	}
+
+	Set<DigweedSpot> getReadyDigweed()
+	{
+		return digweed.getReady();
 	}
 
 	boolean isQuickActionOpen(Station station)

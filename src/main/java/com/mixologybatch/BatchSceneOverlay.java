@@ -59,6 +59,7 @@ final class BatchSceneOverlay extends Overlay
 
 		Guidance guidance = plugin.getGuidance();
 		renderQuickActions(guidance);
+		renderDigweed(graphics);
 		if (guidance.getPhase() == Guidance.Phase.MIXING)
 		{
 			renderMixingRecipe(
@@ -139,6 +140,18 @@ final class BatchSceneOverlay extends Overlay
 					config.quickActionColor(),
 					config.outlineFeather());
 			}
+		}
+	}
+
+	private void renderDigweed(Graphics2D graphics)
+	{
+		if (!config.highlightDigweed())
+		{
+			return;
+		}
+		for (DigweedSpot spot : plugin.getReadyDigweed())
+		{
+			drawTarget(graphics, spot.getLabObject(), "DIGWEED", config.digweedColor());
 		}
 	}
 

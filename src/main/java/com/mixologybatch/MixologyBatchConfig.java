@@ -8,6 +8,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Notification;
 import net.runelite.client.config.Range;
 
 @ConfigGroup(MixologyBatchConfig.GROUP)
@@ -242,6 +243,43 @@ public interface MixologyBatchConfig extends Config
 	}
 
 	@ConfigItem(
+		section = DISPLAY,
+		keyName = "highlightDigweed",
+		name = "Highlight Digweed",
+		description = "Outline a Digweed in the lab corner where it has spawned and show its corner in the panel",
+		position = 10
+	)
+	default boolean highlightDigweed()
+	{
+		return true;
+	}
+
+	@Alpha
+	@ConfigItem(
+		section = DISPLAY,
+		keyName = "digweedColor",
+		name = "Digweed color",
+		description = "Colour used for the Digweed outline",
+		position = 11
+	)
+	default Color digweedColor()
+	{
+		return new Color(255, 220, 60);
+	}
+
+	@ConfigItem(
+		section = DISPLAY,
+		keyName = "notifyDigweed",
+		name = "Notify Digweed",
+		description = "Send a RuneLite notification when a Digweed spawns",
+		position = 12
+	)
+	default Notification notifyDigweed()
+	{
+		return Notification.ON;
+	}
+
+	@ConfigItem(
 		section = ORDERS,
 		keyName = "useCurrentOrders",
 		name = "Use current orders",
@@ -288,5 +326,17 @@ public interface MixologyBatchConfig extends Config
 	default boolean brewCurrentOrders()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		section = ORDERS,
+		keyName = "guardConveyor",
+		name = "Guard conveyor",
+		description = "Swap the conveyor's Examine option into left-click while a refill is due, so a stray click doesn't deposit. The deposit stays on right-click",
+		position = 4
+	)
+	default boolean guardConveyor()
+	{
+		return false;
 	}
 }

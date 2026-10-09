@@ -39,6 +39,13 @@ final class BatchPanelOverlay extends OverlayPanel
 		}
 
 		panelComponent.getChildren().add(TitleComponent.builder().text("Brains Off Mixology Helper").build());
+		if (config.highlightDigweed())
+		{
+			for (DigweedSpot spot : plugin.getReadyDigweed())
+			{
+				addLine("Digweed ready", spot.getCornerName(), config.digweedColor());
+			}
+		}
 		Guidance guidance = plugin.getGuidance();
 		switch (guidance.getPhase())
 		{
